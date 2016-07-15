@@ -11,7 +11,7 @@ import Cocoa
 
 // NOTE: the `: String` *associates the `String` type with this enum. This is... funky, as far as
 // I'm concerned.
-enum MetaNoteDocumentFilenames: String {
+enum DocumentFilenames: String {
     case TextFile = "Text.rtf"
     case AttachmentsDirectory = "Attachments"
 }
@@ -43,7 +43,7 @@ func err(code: ErrorCode, _ userInfo: [NSObject:AnyObject]? = nil) -> NSError {
 class Document: NSDocument {
 
     var text: AttributedString = AttributedString()
-    var documentFileWrapper: FileWrapper = FileWrapper(directoryWithFileWrappers: [:])
+    var docFileWrapper: FileWrapper = FileWrapper(directoryWithFileWrappers: [:])
 
     override init() {
         super.init()
@@ -83,23 +83,19 @@ class Document: NSDocument {
 
     // If I were loading a flat file type instead of a package, I would readFromData and dataOfType.
     override func fileWrapper(ofType typeName: String) throws -> FileWrapper {
-        let textRTFData = try self.text.data(
-            from: NSRange(0..<self.text.length),
-            documentAttributes: [
-                NSDocumentTypeDocumentAttribute: NSRTFTextDocumentType
-            ]
-        )
+        let range = NSRange(0..<self.text.length)
+        let attrs = [NSDocumentTypeDocumentAttribute: NSRTFTextDocumentType]
+        let textRTFData = try self.text.data(from: range, documentAttributes: attrs)
 
-        if let oldTextFileWrapper = self.documentFileWrapper
-            .fileWrappers?[MetaNoteDocumentFilenames.TextFile.rawValue] {
-            self.documentFileWrapper.removeFileWrapper(oldTextFileWrapper)
+        let textFileKey = DocumentFilenames.TextFile.rawValue
+        if let oldTextFileWrapper = self.docFileWrapper.fileWrappers?[textFileKey] {
+            self.docFileWrapper.removeFileWrapper(oldTextFileWrapper)
         }
 
-        self.documentFileWrapper.addRegularFile(
-            withContents: textRTFData,
-            preferredFilename: MetaNoteDocumentFilenames.TextFile.rawValue)
+        self.docFileWrapper.addRegularFile(
+            withContents: textRTFData, preferredFilename: textFileKey)
 
-        return self.documentFileWrapper
+        return self.docFileWrapper
     }
 
     override func read(from fileWrapper: FileWrapper, ofType typeName: String) throws {
@@ -109,19 +105,18 @@ class Document: NSDocument {
         }
 
         // Make sure we can actually get the document text.
-        let key = MetaNoteDocumentFilenames.TextFile.rawValue
-        guard let documentTextData = fileWrappers[key]?.regularFileContents else {
+        let key = DocumentFilenames.TextFile.rawValue
+        guard let rtfData = fileWrappers[key]?.regularFileContents else {
             throw err(code: .CannotLoadText)
         }
 
         // Then load the document text.
-        guard let documentText = AttributedString(rtf: documentTextData, documentAttributes: nil)
-            else {
-                throw err(code: .CannotLoadText)
+        guard let docText = AttributedString(rtf: rtfData, documentAttributes: nil) else {
+            throw err(code: .CannotLoadText)
         }
 
         // And keep the text in memory.
-        self.documentFileWrapper = fileWrapper
-        self.text = documentText
+        self.docFileWrapper = fileWrapper
+        self.text = docText
     }
 }
